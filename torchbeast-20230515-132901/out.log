@@ -1,0 +1,3 @@
+Saving logs data to /scratch/nstevia/torchbeast/palaas/torchbeast/torchbeast-20230515-132901/logs.csv
+Saving logs' fields to /scratch/nstevia/torchbeast/palaas/torchbeast/torchbeast-20230515-132901/fields.csv
+Updated log fields: ['_tick', '_time', 'step', 'episode_returns', 'mean_episode_return', 'mean_episode_step', 'total_loss', 'pg_loss', 'baseline_loss', 'entropy_loss', 'learner_queue_size']
