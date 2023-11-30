@@ -16,5 +16,7 @@ To run the experiments involving each generalist agents
 
 `pip install requirements1.txt`
 
-##Datasets
+##Pre-trained models
+ Download the MGDT pre-trained model at gs://rl-infra-public/multi_game_dt/checkpoint_38274228.pkl
+The IMPALA agent pre-trained model is under ./IMPALA_Pretrained
 

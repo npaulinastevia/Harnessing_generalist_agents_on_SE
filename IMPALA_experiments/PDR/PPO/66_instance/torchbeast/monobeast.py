@@ -528,7 +528,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     env = create_env(flags)
 
     model = Net(env.observation_space, 1, flags.use_lstm)#Net(env.observation_space.shape, env.action_space.n, flags.use_lstm)
-    checkpoint_pretrain = torch.load('/scratch/nstevia/torchbeastppol2d/palaas/torchbeast/torchbeast-20230515-132901/model.tar',map_location='cpu')
+    checkpoint_pretrain = torch.load('/scratch/nstevia/torchbeastppol2d/palaas/torchbeast/IMPALA_Pretrained/model.tar',map_location='cpu')
     for name, target_param in model.named_parameters():
         for param in checkpoint_pretrain["model_state_dict"]:
             if param==name:

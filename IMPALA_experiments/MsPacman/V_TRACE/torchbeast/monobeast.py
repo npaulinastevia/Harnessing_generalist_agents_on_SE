@@ -565,7 +565,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     if t_f:
         model=model_l
     if not t_f:
-        checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/torchbeast-20230515-132901/model.tar')
+        checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/IMPALA_Pretrained/model.tar')
         for name, target_param in model.named_parameters():
             for param in checkpoint_pretrain["model_state_dict"]:
                 if param==name:
@@ -792,7 +792,7 @@ def train2(flags):  # pylint: disable=too-many-branches, too-many-statements
     if t_f:
         model=model_l
     if not t_f:
-        checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/torchbeast-20230515-132901/model.tar')
+        checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/IMPALA_Pretrained/model.tar')
         for name, target_param in model.named_parameters():
             for param in checkpoint_pretrain["model_state_dict"]:
                 if param==name:
