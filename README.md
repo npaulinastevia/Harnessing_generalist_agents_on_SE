@@ -20,3 +20,11 @@ To run the experiments involving each generalist agents
  Download the MGDT pre-trained model [here](gs://rl-infra-public/multi_game_dt/checkpoint_38274228.pkl)
  The IMPALA agent pre-trained model is under ./IMPALA_Pretrained/model.tar
 
+## Run experiments 
+X can be 0, 1 or 2 w.r.t the fine-tuning data budgets
+### Run IMPALA experiments
+ `python -m torchbeast.monobeast --finetuning X`
+
+
+ ### Run MGDT experiments
+ `python run.py --finetuning X`
