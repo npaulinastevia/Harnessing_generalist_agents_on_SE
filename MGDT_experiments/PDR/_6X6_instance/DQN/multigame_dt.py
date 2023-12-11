@@ -9,8 +9,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from Params import configs
-from models.graphcnn_congForSJSSP import GraphCNN
-from decision_transformer.models.decision_transformer import SquashedNormal
+from MGDT_experiments.PDR.models.graphcnn_congForSJSSP import GraphCNN
+from MGDT_experiments.decision_transformer.models.decision_transformer import SquashedNormal
 from multigame_dt_utils import (
     accuracy,
     autoregressive_generate,
@@ -743,6 +743,7 @@ class MultiGameDecisionTransformer(nn.Module):
             #action_P = torch.multinomial(torch.squeeze(pi), num_samples=1)
         else:
             action = action_P = None
+            idx=None
             #idx = select_action_i(pi)
             heur = None#D.Categorical(logits=pi.squeeze()).log_prob(idx)
         #act_sample = sample_from_logits(

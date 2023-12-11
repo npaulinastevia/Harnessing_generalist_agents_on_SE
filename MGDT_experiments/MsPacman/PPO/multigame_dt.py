@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from decision_transformer.models.decision_transformer import SquashedNormal
+from MGDT_experiments.decision_transformer.models.decision_transformer import SquashedNormal
 from multigame_dt_utils import (
     accuracy,
     autoregressive_generate,

@@ -9,8 +9,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from Params import configs
-from models.graphcnn_congForSJSSP import GraphCNN
-from decision_transformer.models.decision_transformer import SquashedNormal
+from MGDT_experiments.PDR.models.graphcnn_congForSJSSP import GraphCNN
+from MGDT_experiments.decision_transformer.models.decision_transformer import SquashedNormal
 from multigame_dt_utils import (
     accuracy,
     autoregressive_generate,
@@ -350,17 +350,15 @@ class MultiGameDecisionTransformer(nn.Module):
         else:
             tokens_per_step = num_obs_tokens + 2
 
-        self.positional_embedding = nn.Parameter(torch.randn(19 * num_steps, self.d_model)).cuda()#nn.Parameter(torch.randn(19 * num_steps, self.d_model)).cuda()
+        self.positional_embedding = nn.Parameter(torch.randn(19 * num_steps, self.d_model)).cuda() #nn.Parameter(torch.randn(19 * num_steps, self.d_model)).cuda()
 
 
         self.ret_linear = nn.Linear(self.d_model, self.num_returns)
 
         if stochastic_policy:
             self.act_linear=DiagGaussianActor(self.d_model, self.num_actions)
-            self.act_val_linear = nn.Linear(self.d_model, 1)
         else:
             self.act_linear = nn.Linear(self.d_model, self.num_actions)
-            self.act_val_linear = nn.Linear(self.d_model, 1)
         if self.predict_reward:
             self.rew_linear = nn.Linear(self.d_model, self.num_rewards)
 
@@ -587,13 +585,10 @@ class MultiGameDecisionTransformer(nn.Module):
         ret_pred = self.ret_linear(ret_pred)
         self.act_linear = nn.Linear(self.d_model, self.num_actions).to(device=device)
         act_pred = self.act_linear(act_pred)
-
-        act_val = self.act_val_linear(act_target)
         # Return logits as well as pre-logits embedding.
         result_dict = {
             "embeds": None,
             'act_target':act_target,
-            'act_val': act_val,
             'custom_causal_mask':act_mask,
             "action_logits": act_pred,
             "return_logits": ret_pred,
@@ -724,26 +719,24 @@ class MultiGameDecisionTransformer(nn.Module):
 
         # Generate a sample from action logits.
 
-        res = logits_fn(x, graph_pool,
+        act_logits = logits_fn(x, graph_pool,
             padded_nei,
             adj,
-            candidate,mask,inputs)#[:, timestep, :]
-        act_logits=res["action_logits"]
+            candidate,mask,inputs)["action_logits"]#[:, timestep, :]
         mask_reshape = mask.reshape(act_logits.size())
         act_logits[mask_reshape] = -1e5#float('-inf')
-
         #print(core_output.shape,'coreoutput')
-        act_val = res["act_val"]
+
         pi = F.softmax(act_logits, dim=1)
         if pi.shape[0] == 1:
             action, idx = select_action(pi, inputs['candidate'], None)
 
-            heur = D.Categorical(logits=pi.squeeze()).log_prob(idx)
+            #heur = D.Categorical(logits=pi.squeeze()).log_prob(idx)
             #action_P = torch.multinomial(torch.squeeze(pi), num_samples=1)
         else:
             action = action_P = None
-            idx = select_action_i(pi)
-            heur = D.Categorical(logits=pi.squeeze()).log_prob(idx)
+            #idx = select_action_i(pi)
+            #heur = D.Categorical(logits=pi.squeeze()).log_prob(idx)
         #act_sample = sample_from_logits(
         #    act_logits,
         #    generator=rng,
@@ -751,5 +744,5 @@ class MultiGameDecisionTransformer(nn.Module):
         #    temperature=action_temperature,
          #   top_percentile=action_top_percentile,
         #)
-        return action,None,heur,inputs["returns-to-go"],act_val
-        #return action,None,act_logits,inputs["returns-to-go"]
+
+        return action,None,act_logits,inputs["returns-to-go"]

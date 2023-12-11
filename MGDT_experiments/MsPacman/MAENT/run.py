@@ -51,7 +51,6 @@ from lamb import Lamb
 #from stable_baselines3.common.vec_env import SubprocVecEnv
 from pathlib import Path
 from data import create_dataloader
-from decision_transformer.models.decision_transformer import DecisionTransformer
 from evaluation import create_vec_eval_episodes_fn, vec_evaluate_episode_rtg
 from trainer import SequenceTrainer
 from logger import Logger
@@ -86,7 +85,7 @@ tf.config.set_visible_devices([], "GPU")
 @torch.no_grad()
 
 def check_bug1():
-    folder_bug = 'bug_left/'
+    folder_bug = './MGDT_experiments/MsPacman/bug_left/'
     files = os.listdir(folder_bug)
     img_bug = [file for file in files if file.startswith('bug')]
     img = Image.open("current_screen.png")
@@ -108,7 +107,7 @@ def check_bug1():
 
 
 def check_bug3():
-    folder_bug = 'bug_left/'
+    folder_bug = './MGDT_experiments/MsPacman/bug_left/'
     files = os.listdir(folder_bug)
     img_bug = [file for file in files if file.startswith('bug')]
     img = Image.open("current_screen.png")
@@ -130,7 +129,7 @@ def check_bug3():
 
 
 def check_bug2():
-    folder_bug = 'bug_right/'
+    folder_bug = './MGDT_experiments/MsPacman/bug_right/'
     files = os.listdir(folder_bug)
     img_bug = [file for file in files if file.startswith('bug')]
     img = Image.open("current_screen.png")
@@ -152,7 +151,7 @@ def check_bug2():
 
 
 def check_bug4():
-    folder_bug = 'bug_right/'
+    folder_bug = './MGDT_experiments/MsPacman/bug_right/'
     files = os.listdir(folder_bug)
     img_bug = [file for file in files if file.startswith('bug')]
     img = Image.open("current_screen.png")

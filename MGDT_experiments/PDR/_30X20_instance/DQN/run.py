@@ -12,15 +12,6 @@ import collections
 import functools
 import json
 import os
-from torch import distributions as pyd
-import torch.backends.cudnn as cudnn
-import torch.optim as optim
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-
-import torch.distributed as dist
-from models.graphcnn_congForSJSSP import GraphCNN
 import torch.utils.data.distributed
 from Params import configs
 
@@ -50,7 +41,6 @@ from lamb import Lamb
 #from stable_baselines3.common.vec_env import SubprocVecEnv
 from pathlib import Path
 from data import create_dataloader
-from decision_transformer.models.decision_transformer import DecisionTransformer
 from evaluation import create_vec_eval_episodes_fn, vec_evaluate_episode_rtg
 from trainer import SequenceTrainer
 from logger import Logger
@@ -370,12 +360,33 @@ class Experiment:
         PATCH_SHAPE = (5, 5) # The size of tensor a (16) must match the size of tensor b (36) at non-singleton dimension 2
         NUM_ACTIONS = 1  # 18 Maximum number of actions in the full dataset.
         # rew=0: no reward, rew=1: score a point, rew=2: end game rew=3: lose a point
-        NUM_REWARDS = 3
+        NUM_REWARDS = 4
         RETURN_RANGE = [-20, 100]  # A reasonable range of returns identified in the dataset
         self.state_dim, self.act_dim, self.action_range = self._get_env_spec(variant)
         self.target_entropy = -self.act_dim
         self.logger = Logger(variant)
         self.model = MultiGameDecisionTransformer(
+            img_size=OBSERVATION_SHAPE,
+            patch_size=PATCH_SHAPE,
+            num_actions=NUM_ACTIONS,
+            num_rewards=NUM_REWARDS,
+            return_range=RETURN_RANGE,
+            d_model=1280,
+            num_layers=10,
+            act_dim=self.act_dim,
+            dropout_rate=0.1,
+            predict_reward=True,
+            single_return_token=True,
+            conv_dim=256,
+            stochastic_policy=False,
+            max_ep_len=MAX_EPISODE_LEN,
+            eval_context_length=variant["eval_context_length"],
+            init_temperature=variant["init_temperature"],
+            state_dim=self.state_dim,
+            target_entropy=self.target_entropy,
+            parser=parser,
+        )
+        self.target_net = MultiGameDecisionTransformer(
             img_size=OBSERVATION_SHAPE,
             patch_size=PATCH_SHAPE,
             num_actions=NUM_ACTIONS,
@@ -526,7 +537,7 @@ class Experiment:
             torch.set_rng_state(checkpoint["pytorch"])
             print(f"Model loaded at {path_prefix}/model.pt")
     def _load_model_pretrain(self, path_prefix):
-        path_prefix='/scratch/nstevia/100kfinetuning/mgdt3020sac5/exp/2023.10.27/025147-default'
+        path_prefix='/scratch/nstevia/100kfinetuning/mgdt3020dqn/exp/2023.11.05/225329-default'
         if Path(f"{path_prefix}/model.pt").exists():
             with open(f"{path_prefix}/model.pt", "rb") as f:
                 checkpoint_pretrain = torch.load(f)
@@ -786,6 +797,7 @@ class Experiment:
 
         trainer = SequenceTrainer(
             model=self.model,
+            target=self.target_net,
             optimizer=self.optimizer,
             log_temperature_optimizer=self.log_temperature_optimizer,
             scheduler=self.scheduler,
@@ -813,7 +825,7 @@ class Experiment:
             maxon=1
         else:
             maxon = 120000
-
+       
         while self.online_iter < maxon:#self.variant["max_online_iters"]:
 
             start = datetime.datetime.now()
@@ -993,8 +1005,13 @@ class Experiment:
     def __call__(self):
 
         utils.set_seed_everywhere(args.seed)
-
         def loss_fn(
+                state_action_values, expected_state_action_values
+        ):
+            # a_hat is a SquashedNormal Distribution
+
+            return nn.MSELoss()(state_action_values.float(), expected_state_action_values)
+        def loss_fn1(
             a_hat_dist,
             a,
             attention_mask,

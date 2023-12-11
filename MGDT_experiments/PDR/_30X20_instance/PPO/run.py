@@ -12,15 +12,6 @@ import collections
 import functools
 import json
 import os
-from torch import distributions as pyd
-import torch.backends.cudnn as cudnn
-import torch.optim as optim
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-
-import torch.distributed as dist
-from models.graphcnn_congForSJSSP import GraphCNN
 import torch.utils.data.distributed
 from Params import configs
 
@@ -50,7 +41,6 @@ from lamb import Lamb
 #from stable_baselines3.common.vec_env import SubprocVecEnv
 from pathlib import Path
 from data import create_dataloader
-from decision_transformer.models.decision_transformer import DecisionTransformer
 from evaluation import create_vec_eval_episodes_fn, vec_evaluate_episode_rtg
 from trainer import SequenceTrainer
 from logger import Logger
@@ -478,7 +468,7 @@ class Experiment:
 
         self.tempera=self.model.temperature()
         self.entro=self.model.target_entropy
-        #self._load_model_pretrain(path_prefix=self.logger.log_path)
+        self._load_model_pretrain(path_prefix=self.logger.log_path)
 
 
     def _get_env_spec(self, variant):
@@ -547,7 +537,7 @@ class Experiment:
             torch.set_rng_state(checkpoint["pytorch"])
             print(f"Model loaded at {path_prefix}/model.pt")
     def _load_model_pretrain(self, path_prefix):
-        path_prefix='/scratch/nstevia/mgdtl2dppo/exp/2023.10.01/034547-default'
+        path_prefix='/scratch/nstevia/100kfinetuning/mgdt3020ppo/exp/2023.11.01/233856-default'
         if Path(f"{path_prefix}/model.pt").exists():
             with open(f"{path_prefix}/model.pt", "rb") as f:
                 checkpoint_pretrain = torch.load(f)
@@ -834,7 +824,7 @@ class Experiment:
         if evaluate:
             maxon=1
         else:
-            maxon = 720
+            maxon = 120000
 
         while self.online_iter < maxon:#self.variant["max_online_iters"]:
 
