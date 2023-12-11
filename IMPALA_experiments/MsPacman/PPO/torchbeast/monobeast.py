@@ -35,11 +35,11 @@ from torch import multiprocessing as mp
 from torch import nn
 from torch.nn import functional as F
 import torch.distributions as D
-from torchbeast import atari_wrappers
-from torchbeast.core import environment
-from torchbeast.core import file_writer
-from torchbeast.core import prof
-from torchbeast.core import vtrace
+from IMPALA_experiments.helper_functions import atari_wrappers
+from IMPALA_experiments.helper_functions.core import environment
+from IMPALA_experiments.helper_functions.core import file_writer
+from IMPALA_experiments.helper_functions.core import prof
+
 
 import numpy as np
 # yapf: disable

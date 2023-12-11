@@ -1,5 +1,5 @@
-from mb_agg import *
-from agent_utils import *
+from IMPALA_experiments.helper_functions.mb_agg import *
+from IMPALA_experiments.helper_functions.agent_utils import *
 import torch
 import numpy as np
 import argparse
@@ -24,7 +24,7 @@ N_MACHINES_N = params.Nn_m
 LOW = configs.low
 HIGH = configs.high
 
-from JSSP_Env import SJSSP
+from IMPALA_experiments.helper_functions.JSSP_Env import SJSSP
 from PPO_jssp_multiInstances import PPO
 env = SJSSP(n_j=N_JOBS_P, n_m=N_MACHINES_P)
 

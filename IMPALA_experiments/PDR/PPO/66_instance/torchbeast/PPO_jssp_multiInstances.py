@@ -1,7 +1,7 @@
-from mb_agg import *
-from agent_utils import eval_actions
-from agent_utils import select_action
-from models.actor_critic import ActorCritic
+from IMPALA_experiments.helper_functions.mb_agg import *
+from IMPALA_experiments.helper_functions.agent_utils import eval_actions
+from IMPALA_experiments.helper_functions.agent_utils import select_action
+from IMPALA_experiments.helper_functions.models.actor_critic import ActorCritic
 from copy import deepcopy
 import torch
 import time
@@ -163,10 +163,10 @@ class PPO:
 
 def main():
 
-    from JSSP_Env import SJSSP
+    from IMPALA_experiments.helper_functions.JSSP_Env import SJSSP
     envs = [SJSSP(n_j=configs.n_j, n_m=configs.n_m) for _ in range(configs.num_envs)]
     
-    from uniform_instance_gen import uni_instance_gen
+    from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
     data_generator = uni_instance_gen
 
     dataLoaded = np.load('./DataGen/generatedData' + str(configs.n_j) + '_' + str(configs.n_m) + '_Seed' + str(configs.np_seed_validation) + '.npy')

@@ -79,8 +79,8 @@ def calJobAndMchRdyTimeOfa(a, mchMat, durMat, mchsStartTimes, opIDsOnMchs):
 
 
 if __name__ == "__main__":
-    from JSSP_Env import SJSSP
-    from uniform_instance_gen import uni_instance_gen
+    from IMPALA_experiments.helper_functions.JSSP_Env import SJSSP
+    from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
     import time
 
     n_j = 3

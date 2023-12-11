@@ -21,18 +21,12 @@ import time
 import timeit
 import traceback
 import typing
-from torchbeast.validation import validate
-from torchbeast.mb_agg import *
-from torchbeast.agent_utils import *
+from IMPALA_experiments.helper_functions.mb_agg import *
+from IMPALA_experiments.helper_functions.agent_utils import *
 import torch.distributions as D
-from gym.spaces import Box, Discrete
 from skimage.draw import random_shapes
 os.environ["OMP_NUM_THREADS"] = "1"  # Necessary for multithreading.
-from PIL import Image, ImageFile
-from Params import configs
-#ImageFile.LOAD_TRUNCATED_IMAGES = True
-from torchbeast.JSSP_Env import SJSSP
-from skimage.metrics import structural_similarity as ssim
+from IMPALA_experiments.helper_functions.JSSP_Env import SJSSP
 os.environ["OMP_NUM_THREADS"] = "1"  # Necessary for multithreading.
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 import cv2
@@ -41,13 +35,11 @@ from torch import multiprocessing as mp
 from torch import nn
 from torch.nn import functional as F
 from Params import configs
-from torchbeast import atari_wrappers
-from torchbeast.core import environment
-from torchbeast.core import file_writer
-from torchbeast.core import prof
-from torchbeast.core import vtrace
+from IMPALA_experiments.helper_functions.core import environment
+from IMPALA_experiments.helper_functions.core import file_writer
+from IMPALA_experiments.helper_functions.core import prof
 import numpy as np
-from torchbeast.models.graphcnn_congForSJSSP import GraphCNN
+from IMPALA_experiments.helper_functions.models.graphcnn_congForSJSSP import GraphCNN
 #from torchbeast.wuji.problem.mdp.netease.blockmaze.maze import BaseMaze, Object, DeepMindColor as color, BaseEnv, \
  #   VonNeumannMotion
 
@@ -200,9 +192,9 @@ def act(
     try:
         logging.info("Actor %i started.", actor_index)
         timings = prof.Timings()  # Keep track of how fast things are.
-        from torchbeast.uniform_instance_gen import uni_instance_gen
+        from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
         data_generator = uni_instance_gen
-        dataLoaded = np.load('/scratch/nstevia/torchbeastppol2d/torchbeast/DataGen/generatedData' + str(configs.n_j) + '_' + str(configs.n_m) + '_Seed' + str(
+        dataLoaded = np.load('IMPALA_experiments/helper_functions/DataGen/generatedData' + str(configs.n_j) + '_' + str(configs.n_m) + '_Seed' + str(
             configs.np_seed_validation) + '.npy')
         vali_data = []
         for i in range(dataLoaded.shape[0]):
@@ -461,7 +453,7 @@ def learn(
 
 def create_buffers(flags, obs_shape, num_actions) -> Buffers:
     T = flags.unroll_length
-    from torchbeast.uniform_instance_gen import uni_instance_gen
+    from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
     data_generator = uni_instance_gen
     env=SJSSP(n_j=configs.n_j, n_m=configs.n_m)
     num_actions=1
@@ -734,11 +726,11 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
 
     lebug = []
     numberbugs = 0
-    from torchbeast.uniform_instance_gen import uni_instance_gen
+    from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
     data_generator = uni_instance_gen
 
     dataLoaded = np.load(
-        '/scratch/nstevia/torchbeastppol2d/torchbeast/DataGen/generatedData' + str(configs.n_j) + '_' + str(
+        'IMPALA_experiments/helper_functions/DataGen/generatedData' + str(configs.n_j) + '_' + str(
             configs.n_m) + '_Seed' + str(
             configs.np_seed_validation) + '.npy')
     dataset = []
@@ -1024,16 +1016,9 @@ Net = AtariNet
 
 
 def create_env(flags):
-    from torchbeast.JSSP_Env import SJSSP
+    from IMPALA_experiments.helper_functions.JSSP_Env import SJSSP
     return SJSSP(n_j=configs.n_j, n_m=configs.n_m)
-    #atari_wrappers.wrap_pytorch(
-     #   atari_wrappers.wrap_deepmind(
-     #       SJSSP(n_j=configs.n_j, n_m=configs.n_m) , #atari_wrappers.make_atari(flags.env), EnvM()
-      #      clip_rewards=False,
-       #     frame_stack=True,
-       #     scale=False,
-       # )
-    #)
+
 
 
 def main(flags):

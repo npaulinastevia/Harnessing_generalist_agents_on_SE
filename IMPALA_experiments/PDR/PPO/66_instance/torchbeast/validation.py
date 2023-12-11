@@ -2,10 +2,9 @@ def validate(vali_set, model):
     N_JOBS = vali_set[0][0].shape[0]
     N_MACHINES = vali_set[0][0].shape[1]
 
-    from JSSP_Env import SJSSP
-    from mb_agg import g_pool_cal
-    from agent_utils import sample_select_action
-    from agent_utils import greedy_select_action
+    from IMPALA_experiments.helper_functions.JSSP_Env import SJSSP
+    from IMPALA_experiments.helper_functions.mb_agg import g_pool_cal
+    from IMPALA_experiments.helper_functions.agent_utils import greedy_select_action
     import numpy as np
     import torch
     from Params import configs
@@ -45,9 +44,8 @@ def validate(vali_set, model):
 
 if __name__ == '__main__':
 
-    from uniform_instance_gen import uni_instance_gen
+    from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
     import numpy as np
-    import time
     import argparse
     from Params import configs
 

@@ -21,7 +21,7 @@ import time
 import timeit
 import traceback
 import typing
-from torchbeast.wuji.problem.mdp.netease.blockmaze.maze import BaseMaze, Object, DeepMindColor as color, BaseEnv, \
+from IMPALA_experiments.helper_functions.wuji.problem.mdp.netease.blockmaze.maze import BaseMaze, Object, DeepMindColor as color, BaseEnv, \
     VonNeumannMotion
 os.environ["OMP_NUM_THREADS"] = "1"  # Necessary for multithreading.
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
@@ -36,11 +36,11 @@ from torch import multiprocessing as mp
 from torch import nn
 from torch.nn import functional as F
 import torch.distributions as D
-from torchbeast import atari_wrappers
-from torchbeast.core import environment
-from torchbeast.core import file_writer
-from torchbeast.core import prof
-from torchbeast.core import vtrace
+
+from IMPALA_experiments.helper_functions import atari_wrappers
+from IMPALA_experiments.helper_functions.core import environment
+from IMPALA_experiments.helper_functions.core import file_writer
+from IMPALA_experiments.helper_functions.core import prof
 from skimage.draw import random_shapes
 from gym.spaces import Box, Discrete
 import numpy as np

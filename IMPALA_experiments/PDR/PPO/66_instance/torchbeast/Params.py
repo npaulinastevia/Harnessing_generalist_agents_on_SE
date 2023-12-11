@@ -4,8 +4,8 @@ parser = argparse.ArgumentParser(description='Arguments for ppo_jssp')
 # args for device
 parser.add_argument('--device', type=str, default="cuda", help='Number of jobs of instances')
 # args for env
-parser.add_argument('--n_j', type=int, default=50, help='Number of jobs of instance')
-parser.add_argument('--n_m', type=int, default=20, help='Number of machines instance')
+parser.add_argument('--n_j', type=int, default=6, help='Number of jobs of instance')
+parser.add_argument('--n_m', type=int, default=6, help='Number of machines instance')
 parser.add_argument('--rewardscale', type=float, default=0., help='Reward scale for positive rewards')
 parser.add_argument('--init_quality_flag', type=bool, default=False, help='Flag of whether init state quality is 0, True for 0')
 parser.add_argument('--low', type=int, default=1, help='LB of duration')
@@ -27,7 +27,7 @@ parser.add_argument('--hidden_dim_actor', type=int, default=32, help='hidden dim
 parser.add_argument('--num_mlp_layers_critic', type=int, default=2, help='No. of layers in critic MLP')
 parser.add_argument('--hidden_dim_critic', type=int, default=32, help='hidden dim of MLP in critic')
 # args for PPO
-parser.add_argument('--num_envs', type=int, default=4, help='No. of envs for training')
+parser.add_argument('--num_envs', type=int, default=1, help='No. of envs for training')
 parser.add_argument('--max_updates', type=int, default=10000, help='No. of episodes of each env for training')
 parser.add_argument('--lr', type=float, default=2e-5, help='lr')
 parser.add_argument('--decayflag', type=bool, default=False, help='lr decayflag')

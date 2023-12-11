@@ -35,13 +35,13 @@ from torch import multiprocessing as mp
 from torch import nn
 from torch.nn import functional as F
 
-from torchbeast import atari_wrappers
-from torchbeast.core import environment
-from torchbeast.core import file_writer
-from torchbeast.core import prof
-from torchbeast.core import vtrace
+from IMPALA_experiments.helper_functions import atari_wrappers
+from IMPALA_experiments.helper_functions.core import environment
+from IMPALA_experiments.helper_functions.core import file_writer
+from IMPALA_experiments.helper_functions.core import prof
+from IMPALA_experiments.helper_functions.core import vtrace
 import numpy as np
-from torchbeast.wuji.problem.mdp.netease.blockmaze.maze import BaseMaze, Object, DeepMindColor as color, BaseEnv, \
+from IMPALA_experiments.helper_functions.wuji.problem.mdp.netease.blockmaze.maze import BaseMaze, Object, DeepMindColor as color, BaseEnv, \
     VonNeumannMotion
 
 # yapf: disable
@@ -58,13 +58,15 @@ parser.add_argument("--xpid", default=None,
 # Training settings.
 parser.add_argument("--disable_checkpoint", action="store_true",
                     help="Disable saving checkpoint.")
-parser.add_argument("--savedir", default="/scratch/nstevia/torchbeastvtracewuji/logs/torchbeast",
+parser.add_argument("--savedir", default="/scratch/nstevia/100kfinetuning/torchbeastwujivtrace1/logs/torchbeast",
                     help="Root dir where experiment data will be saved.")
 parser.add_argument("--num_actors", default=48, type=int, metavar="N",
                     help="Number of actors (default: 4).")
 parser.add_argument("--total_steps", default=200000, type=int, metavar="T",
                     help="Total environment steps to train for.")
 parser.add_argument("--batch_size", default=32, type=int, metavar="B",
+                    help="Learner batch size.")
+parser.add_argument("--indice", default=1, type=int, metavar="B",
                     help="Learner batch size.")
 parser.add_argument("--unroll_length", default=80, type=int, metavar="T",
                     help="The unroll length (time dimension).")
@@ -324,7 +326,7 @@ def act(
 
                 #print('ennnnvvvn',numberofbug,env_output['reward'])
                 timings.time("step")
-                fi = open('/scratch/nstevia/torchbeastvtracewuji/21clip025outputrewOPT.txt', 'a+')
+                fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025outputrewOPT.txt', 'a+')
                 fi.write(str(numberbugs) + ',' + str(env_output['reward'])+ ',' + str(ep) + ',' + str(actor_index)+',' +str(env_output['info'])+  os.linesep)
                 fi.close()
                 for key in env_output:
@@ -439,7 +441,7 @@ def learn(
         total_loss = pg_loss + baseline_loss + entropy_loss
 
         episode_returns = batch["episode_return"][batch["done"]]
-        fi = open('/scratch/nstevia/torchbeastvtracewuji/21clip025outputepisodesOPT.txt', 'a+')
+        fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025outputepisodesOPT.txt', 'a+')
         fi.write(
             str('begin') + ',' + str(len(episode_returns)) + ',' + str(tuple(episode_returns.cpu().numpy())) + ',' + str() + os.linesep)
         fi.close()
@@ -522,7 +524,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     env = create_env(flags)
 
     model = Net(env.observation_space.shape, env.action_space.n, flags.use_lstm)
-    checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/IMPALA_Pretrained/model.tar')
+    checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/torchbeast-20230515-132901/model.tar')
     for name, target_param in model.named_parameters():
         for param in checkpoint_pretrain["model_state_dict"]:
             if param==name:
@@ -622,7 +624,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if step>=10000:
+            if time.time() - train_start>=864:
                 break
 
         if i == 0:
@@ -681,7 +683,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if step>=10000:
+            if time.time() - train_start>=864:
                 break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
@@ -696,7 +698,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
             actor.join(timeout=1)
 
     checkpoint()
-    fi = open('/scratch/nstevia/torchbeastvtracewuji/21clip025traintimeOPT.txt', 'a+')
+    fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025traintimeOPT.txt', 'a+')
     fi.write(str(time.time() - train_start) +  os.linesep)
     fi.close()
     gym_env = create_env(flags)
@@ -725,7 +727,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 print('okdak',observation['info']['bug'],numberbugs)
                 numberbugs = numberbugs + 1
                 lebug.append(observation['info']['bug'])
-                fi = open('/scratch/nstevia/torchbeastvtracewuji/21clip025typeofbugs_addtrainOPT.txt', 'a+')
+                fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025typeofbugs_addtrainOPT.txt', 'a+')
                 fi.write(str(observation['reward']) + ',' + str(observation['info']['bug']) + ',' + str(numberbugs) + os.linesep)
                 fi.close()
         if observation["done"].item() or st%400==0:
@@ -738,7 +740,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 observation["episode_return"].item(),
             )
         st=st+1
-    fi = open('/scratch/nstevia/torchbeastvtracewuji/21clip025evaltimeOPT.txt', 'a+')
+    fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025evaltimeOPT.txt', 'a+')
     fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
     fi.close()
     plogger.close()
