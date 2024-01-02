@@ -883,8 +883,14 @@ class Experiment:
             maxon = 50000
         start1 = datetime.datetime.now()
         while self.online_iter < maxon:#self.variant["max_online_iters"]:
-            if millis_interval(start1, datetime.datetime.now())/1000>=432:
+            if self.variant["finetuning"] == 0:
                 break
+            if self.variant["finetuning"] == 1:
+                if millis_interval(start1, datetime.datetime.now()) / 1000 >= 432:
+                    break
+            else:
+                if millis_interval(start1, datetime.datetime.now()) / 1000 >= 864:
+                    break
             start = datetime.datetime.now()
             outputs = {}
             if not evaluate:
@@ -1190,6 +1196,8 @@ if __name__ == "__main__":
     parser.add_argument('--dist-backend', default='gloo', type=str, help='')
     parser.add_argument('--world_size', default=1, type=int, help='')
     parser.add_argument('--distributed', action='store_true', help='')
+    parser.add_argument("--finetuning", default=2, type=int,
+                        help="specify the data budget")
 
     args = parser.parse_args()
 

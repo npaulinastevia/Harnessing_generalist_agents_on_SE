@@ -909,10 +909,18 @@ class Experiment:
         while self.online_iter < 80000000:#self.variant["max_online_iters"]:
             start = datetime.datetime.now()
             outputs = {}
-            if self.online_iter>=20:
-                mode='eval'
-            else:
-                mode='normal'
+            if self.variant["finetuning"] == 0:
+                mode = 'eval'
+            elif self.variant["finetuning"] == 1:
+                if self.online_iter >= 10:
+                    mode = 'eval'
+                else:
+                    mode = 'normal'
+            elif self.variant["finetuning"] == 2:
+                if self.online_iter >= 20:
+                    mode = 'eval'
+                else:
+                    mode = 'normal'
             x=self._augment_trajectories(
 
                 online_envs,
@@ -1119,6 +1127,8 @@ if __name__ == "__main__":
     parser.add_argument('--dist-backend', default='gloo', type=str, help='')
     parser.add_argument('--world_size', default=1, type=int, help='')
     parser.add_argument('--distributed', action='store_true', help='')
+    parser.add_argument("--finetuning", default=2, type=int,
+                        help="specify the data budget")
 
     args = parser.parse_args()
 

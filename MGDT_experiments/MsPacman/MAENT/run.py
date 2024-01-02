@@ -867,10 +867,18 @@ class Experiment:
         while self.online_iter < 5000000:#self.variant["max_online_iters"]:
             start = datetime.datetime.now()
             outputs = {}
-            if self.online_iter>=10:
-                mode='eval'
-            else:
-                mode='normal'
+            if self.variant["finetuning"] == 0:
+                mode = 'eval'
+            elif self.variant["finetuning"] == 1:
+                if self.online_iter >= 10:
+                    mode = 'eval'
+                else:
+                    mode = 'normal'
+            elif self.variant["finetuning"] == 2:
+                if self.online_iter >= 20:
+                    mode = 'eval'
+                else:
+                    mode = 'normal'
 
             x=self._augment_trajectories(
 
@@ -1064,6 +1072,8 @@ if __name__ == "__main__":
     parser.add_argument("--log_to_tb", "-w", type=bool, default=True)
     parser.add_argument("--save_dir", type=str, default="./exp")
     parser.add_argument("--exp_name", type=str, default="default")
+    parser.add_argument("--finetuning", default=2, type=int,
+                        help="specify the data budget")
 
     args = parser.parse_args()
 
