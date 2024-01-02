@@ -39,5 +39,6 @@ parser.add_argument('--eps_clip', type=float, default=0.2, help='clip parameter 
 parser.add_argument('--vloss_coef', type=float, default=1, help='critic loss coefficient')
 parser.add_argument('--ploss_coef', type=float, default=2, help='policy loss coefficient')
 parser.add_argument('--entloss_coef', type=float, default=0.01, help='entropy loss coefficient')
-
+parser.add_argument("--finetuning", default=2,type=int,
+                    help="specify the data budget")
 configs = parser.parse_args()

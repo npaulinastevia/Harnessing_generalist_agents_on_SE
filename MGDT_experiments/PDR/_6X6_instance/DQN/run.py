@@ -814,13 +814,22 @@ class Experiment:
             SummaryWriter(self.logger.log_path) if self.variant["log_to_tb"] else None
         )
         evaluate = False
-        if evaluate:
-            maxon=1
+
+        if configs.finetuning== 1:
+            if evaluate:
+                maxon = 1
+            else:
+                maxon = 360
         else:
-            maxon = 720
+            if evaluate:
+                maxon = 1
+            else:
+                maxon = 720
+
        
         while self.online_iter < maxon:#self.variant["max_online_iters"]:
-
+            if configs.finetuning==0:
+                break
             start = datetime.datetime.now()
             outputs = {}
             if not evaluate:
