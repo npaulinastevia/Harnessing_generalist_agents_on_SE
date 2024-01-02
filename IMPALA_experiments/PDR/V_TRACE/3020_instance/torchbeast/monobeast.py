@@ -611,8 +611,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if step>=10000:
-                break
+            if configs.finetuning == 1:
+                if step >= 60000:
+                    break
+            else:
+                if step >= 120000:
+                    break
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -670,8 +674,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if step>=10000:
-                break
+            if configs.finetuning == 1:
+                if step >= 60000:
+                    break
+            else:
+                if step >= 120000:
+                    break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -758,76 +766,62 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     fi.close()
     plogger.close()
 
-
 def test(flags, num_episodes: int = 10):
-    N_JOBS_P = configs.n_j
-    # params.Pn_j
-    N_MACHINES_P = configs.n_m  # params.Pn_m
+        gym_env = create_env(flags)
+        env = environment.Environment(gym_env)
+        g_pool_step = g_pool_cal(graph_pool_type=configs.graph_pool_type,
+                                 batch_size=torch.Size([1, configs.n_j * configs.n_m, configs.n_j * configs.n_m]),
+                                 n_nodes=configs.n_j * configs.n_m,
+                                 device='cpu')
+        padded_nei = None
 
-    N_JOBS_N = configs.n_j  # params.Nn_j
-    N_MACHINES_N = configs.n_m  # params.Nn_m
-    gym_env = create_env(flags)
-    env = environment.Environment(gym_env)
-    g_pool_step = g_pool_cal(graph_pool_type=configs.graph_pool_type,
-                             batch_size=torch.Size([1, configs.n_j * configs.n_m, configs.n_j * configs.n_m]),
-                             n_nodes=configs.n_j * configs.n_m,
-                             device='cpu')
-    padded_nei = None
+        model = Net(gym_env.observation_space, 1, flags.use_lstm)
+        model.eval()
+        checkpoint_pretrain = torch.load('/../IMPALA_Pretrained/model.tar', map_location='cpu')
+        for name, target_param in model.named_parameters():
+            for param in checkpoint_pretrain["model_state_dict"]:
+                if param == name:
+                    target_param.data.copy_(checkpoint_pretrain["model_state_dict"][param].data) if \
+                        checkpoint_pretrain["model_state_dict"][
+                            param].shape == target_param.shape else print(
+                        checkpoint_pretrain["model_state_dict"][param].shape,
+                        target_param.shape)
+        eval_start = time.time()
+        total_rew = []
+        st = 0
+        from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
+        data_generator = uni_instance_gen
 
+        dataLoaded = np.load(
+            'IMPALA_experiments/helper_functions/DataGen/generatedData' + str(configs.n_j) + '_' + str(
+                configs.n_m) + '_Seed' + str(
+                configs.np_seed_validation) + '.npy')
+        dataset = []
+        for i in range(dataLoaded.shape[0]):
+            dataset.append((dataLoaded[i][0], dataLoaded[i][1]))
+        for i, data in enumerate(dataset):
+            agent_state = model.initial_state(batch_size=1)
+            # adj, fea, candidate, mask = env.reset(data)
+            observation = env.initial(data=data)
+            ep_reward = - env.gym_env.max_endTime
+            while True:
 
-    model = Net(gym_env.observation_space, 1, flags.use_lstm)
-    model.eval()
-    checkpointpath = flags.savedir + "/latest/model.tar"
-    checkpoint = torch.load(checkpointpath, map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
-    eval_start = time.time()
-    total_rew = []
-    st=0
-
-
-    lebug = []
-    numberbugs = 0
-    from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
-    data_generator = uni_instance_gen
-
-    dataLoaded = np.load(
-        '/scratch/nstevia/torchbeastimpalal2d_5060/torchbeast/DataGen/generatedData' + str(configs.n_j) + '_' + str(
-            configs.n_m) + '_Seed' + str(
-            configs.np_seed_validation) + '.npy')
-    dataset = []
-    for i in range(dataLoaded.shape[0]):
-        dataset.append((dataLoaded[i][0], dataLoaded[i][1]))
-    for i, data in enumerate(dataset):
-        agent_state = model.initial_state(batch_size=1)
-        #adj, fea, candidate, mask = env.reset(data)
-        observation = env.initial(data=data)
-        ep_reward = - env.gym_env.max_endTime
-        while True:
-            #agent_outputs = model(observation)
-            agent_output, agent_state = model(observation['fea'], g_pool_step, padded_nei, observation['adj'],
-                                               observation['candidate'].unsqueeze(0),
-                                               observation['mask'].unsqueeze(0), agent_state, observation)
-            policy_outputs = agent_output
-            observation = env.step(policy_outputs["action"])
-            ep_reward += observation['reward']
-            total_rew.append(ep_reward)
-            #print(len(list(enumerate(dataset))),i,observation["done"].item(),env.gym_env.posRewards,-ep_reward + env.gym_env.posRewards,'st')
-            fi = open('/scratch/nstevia/torchbeastimpalal2d_5060/7testresults'+str(configs.n_j)+str(configs.n_m)+'.txt', 'a+')
-            fi.write(str(ep_reward) +','+str(-ep_reward + env.gym_env.posRewards)+ os.linesep)
-            fi.close()
-            if observation["done"].item():
-                done = observation["done"].item()
-                #observation = env.initial()
-                logging.info(
-                    "Episode ended after %d steps. Return: %.1f",
-                    observation["episode_step"].item(),
-                    observation["episode_return"].item(),
-                )
-                break
-
-    fi = open('/scratch/nstevia/torchbeastimpalal2d_5060/18evaltimeOPT.txt', 'a+')
-    fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
-    fi.close()
+                agent_output, agent_state = model(observation['fea'], g_pool_step, padded_nei, observation['adj'],
+                                                  observation['candidate'].unsqueeze(0),
+                                                  observation['mask'].unsqueeze(0), agent_state, observation)
+                policy_outputs = agent_output
+                observation = env.step(policy_outputs["action"])
+                ep_reward += observation['reward']
+                total_rew.append(ep_reward)
+                if observation["done"].item():
+                    done = observation["done"].item()
+                    # observation = env.initial()
+                    logging.info(
+                        "Episode ended after %d steps. Return: %.1f",
+                        observation["episode_step"].item(),
+                        observation["episode_return"].item(),
+                    )
+                    break
 
 
 class AtariNet(nn.Module):
@@ -1039,7 +1033,7 @@ def create_env(flags):
 
 
 def main(flags):
-    if flags.mode == "train":
+    if configs.finetuning>0:
         #test(flags)
         train(flags)
     else:

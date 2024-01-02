@@ -520,7 +520,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     env = create_env(flags)
 
     model = Net(env.observation_space, 1, flags.use_lstm)#Net(env.observation_space.shape, env.action_space.n, flags.use_lstm)
-    checkpoint_pretrain = torch.load('/scratch/nstevia/torchbeastppol2d/palaas/torchbeast/IMPALA_Pretrained/model.tar',map_location='cpu')
+    checkpoint_pretrain = torch.load('/../IMPALA_Pretrained/model.tar',map_location='cpu')
     for name, target_param in model.named_parameters():
         for param in checkpoint_pretrain["model_state_dict"]:
             if param==name:
@@ -529,7 +529,6 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                     checkpoint_pretrain["model_state_dict"][param].shape,
                     target_param.shape)
 
-    #model.load_state_dict(checkpoint["model_state_dict"])
     buffers = create_buffers(flags, env.observation_space, model)#create_buffers(flags, env.observation_space.shape, model.num_actions)
 
     model.share_memory()
@@ -622,8 +621,13 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if step>=10000:
-                break
+            if configs.finetuning==1:
+                if step>=360:
+                    break
+            else:
+                if step>=720:
+                    break
+
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -681,8 +685,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if step>=10000:
-                break
+            if configs.finetuning == 1:
+                if step >= 360:
+                    break
+            else:
+                if step >= 720:
+                    break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -696,9 +704,9 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
             actor.join(timeout=1)
 
     checkpoint()
-    fi = open('/scratch/nstevia/torchbeastppol2d/20traintimeOPT.txt', 'a+')
-    fi.write(str(time.time() - train_start) +  os.linesep)
-    fi.close()
+    #fi = open('/scratch/nstevia/torchbeastppol2d/20traintimeOPT.txt', 'a+')
+    #fi.write(str(time.time() - train_start) +  os.linesep)
+    #fi.close()
     N_JOBS_P = configs.n_j
     # params.Pn_j
     N_MACHINES_P = configs.n_m  # params.Pn_m
@@ -771,40 +779,62 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
 
 
 def test(flags, num_episodes: int = 10):
-    if flags.xpid is None:
-        checkpointpath = "./latest/model.tar"
-    else:
-        checkpointpath = os.path.expandvars(
-            os.path.expanduser("%s/%s/%s" % (flags.savedir, flags.xpid, "model.tar"))
-        )
-
     gym_env = create_env(flags)
     env = environment.Environment(gym_env)
-    model = Net(gym_env.observation_space.shape, gym_env.action_space.n, flags.use_lstm)
+    g_pool_step = g_pool_cal(graph_pool_type=configs.graph_pool_type,
+                             batch_size=torch.Size([1, configs.n_j * configs.n_m, configs.n_j * configs.n_m]),
+                             n_nodes=configs.n_j * configs.n_m,
+                             device='cpu')
+    padded_nei = None
+
+
+    model = Net(gym_env.observation_space, 1, flags.use_lstm)
     model.eval()
-    checkpoint = torch.load(checkpointpath, map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
+    checkpoint_pretrain = torch.load('/../IMPALA_Pretrained/model.tar', map_location='cpu')
+    for name, target_param in model.named_parameters():
+        for param in checkpoint_pretrain["model_state_dict"]:
+            if param == name:
+                target_param.data.copy_(checkpoint_pretrain["model_state_dict"][param].data) if \
+                checkpoint_pretrain["model_state_dict"][
+                    param].shape == target_param.shape else print(
+                    checkpoint_pretrain["model_state_dict"][param].shape,
+                    target_param.shape)
+    eval_start = time.time()
+    total_rew = []
+    st=0
+    from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
+    data_generator = uni_instance_gen
 
-    observation = env.initial()
-    returns = []
+    dataLoaded = np.load(
+        'IMPALA_experiments/helper_functions/DataGen/generatedData' + str(configs.n_j) + '_' + str(
+            configs.n_m) + '_Seed' + str(
+            configs.np_seed_validation) + '.npy')
+    dataset = []
+    for i in range(dataLoaded.shape[0]):
+        dataset.append((dataLoaded[i][0], dataLoaded[i][1]))
+    for i, data in enumerate(dataset):
+        agent_state = model.initial_state(batch_size=1)
+        #adj, fea, candidate, mask = env.reset(data)
+        observation = env.initial(data=data)
+        ep_reward = - env.gym_env.max_endTime
+        while True:
 
-    while len(returns) < num_episodes:
-        if flags.mode == "test_render":
-            env.gym_env.render()
-        agent_outputs = model(observation)
-        policy_outputs, _ = agent_outputs
-        observation = env.step(policy_outputs["action"])
-        if observation["done"].item():
-            returns.append(observation["episode_return"].item())
-            logging.info(
-                "Episode ended after %d steps. Return: %.1f",
-                observation["episode_step"].item(),
-                observation["episode_return"].item(),
-            )
-    env.close()
-    logging.info(
-        "Average returns over %i steps: %.1f", num_episodes, sum(returns) / len(returns)
-    )
+            agent_output, agent_state = model(observation['fea'], g_pool_step, padded_nei, observation['adj'],
+                                               observation['candidate'].unsqueeze(0),
+                                               observation['mask'].unsqueeze(0), agent_state, observation)
+            policy_outputs = agent_output
+            observation = env.step(policy_outputs["action"])
+            ep_reward += observation['reward']
+            total_rew.append(ep_reward)
+            if observation["done"].item():
+                done = observation["done"].item()
+                #observation = env.initial()
+                logging.info(
+                    "Episode ended after %d steps. Return: %.1f",
+                    observation["episode_step"].item(),
+                    observation["episode_return"].item(),
+                )
+                break
 
 
 class AtariNet(nn.Module):
@@ -910,24 +940,10 @@ class AtariNet(nn.Module):
         #x = inputs["frame"]  # [T, B, C, H, W].
         T=1
         B, B2, *_ = x.shape
-
-        #x = torch.flatten(x, 0, 1)  # Merge time and batch.
-        #x = x.float() / 255.0
-        #x = F.relu(self.conv1(x))nn.Linear(20, 30)
-        #input = torch.randn(128, 20) 128, 30
-        #x = F.relu(self.conv2(x))
-        #x = F.relu(self.conv3(x))
-        #x = nn.Flatten()(x)#x.view(T * B, -1)
-        #self.fc = nn.Linear(x.shape[-1], 256,device=self.device)
         self.fc = nn.Linear(x.shape[-1], 32, device=self.device)
         self.fineModel(self.is_finetune)
         # torch.Size([1, 50, 128]) Linear(in_features=50, out_features=512, bias=True
         x = F.relu(self.fc(x))
-         #torch.Size([1, 50, 128]) Linear(in_features=50, out_features=512, bias=True
-        #x = F.relu(self.fc(x))
-        #one_hot_last_action = F.one_hot(
-        #    inputs["last_action"].view(T * B), self.num_actions
-        #).float()
         clipped_reward = inputs["reward"].view(T * B, 1)
         #print(x.shape,clipped_reward.shape, one_hot_last_action.shape,self.fc)
         t1,t2,*_=x.shape
@@ -1000,10 +1016,6 @@ class AtariNet(nn.Module):
             action_P=None
             heur = None
             action = greedy_select_action(pi,inputs['candidate'])
-            #action_P=torch.argmax(pi, dim=1)
-        #policy_logits = policy_logits.view(T, B, self.num_actions)
-        #baseline = baseline.view(T, B)
-        #action = action.view(T, B)
 
         return (
             dict(policy_logits=torch.squeeze(pi), baseline=torch.squeeze(baseline), action=action,action_P=action_P
@@ -1022,7 +1034,7 @@ def create_env(flags):
 
 
 def main(flags):
-    if flags.mode == "train":
+    if configs.finetuning>0:
         train(flags)
     else:
         test(flags)

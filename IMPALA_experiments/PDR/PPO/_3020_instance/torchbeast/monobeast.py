@@ -624,8 +624,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if step>=10000:
-                break
+            if configs.finetuning == 1:
+                if step >= 60000:
+                    break
+            else:
+                if step >= 120000:
+                    break
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -683,8 +687,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if step>=10000:
-                break
+            if configs.finetuning == 1:
+                if step >= 60000:
+                    break
+            else:
+                if step >= 120000:
+                    break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -766,48 +774,69 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 )
                 break
 
-    fi = open('/scratch/nstevia/torchbeastppol2d3020/18evaltimeOPT.txt', 'a+')
-    fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
-    fi.close()
+    #fi = open('/scratch/nstevia/torchbeastppol2d3020/18evaltimeOPT.txt', 'a+')
+    #fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
+    #fi.close()
     plogger.close()
 
 
+
 def test(flags, num_episodes: int = 10):
-    if flags.xpid is None:
-        checkpointpath = "./latest/model.tar"
-    else:
-        checkpointpath = os.path.expandvars(
-            os.path.expanduser("%s/%s/%s" % (flags.savedir, flags.xpid, "model.tar"))
-        )
+        gym_env = create_env(flags)
+        env = environment.Environment(gym_env)
+        g_pool_step = g_pool_cal(graph_pool_type=configs.graph_pool_type,
+                                 batch_size=torch.Size([1, configs.n_j * configs.n_m, configs.n_j * configs.n_m]),
+                                 n_nodes=configs.n_j * configs.n_m,
+                                 device='cpu')
+        padded_nei = None
 
-    gym_env = create_env(flags)
-    env = environment.Environment(gym_env)
-    model = Net(gym_env.observation_space.shape, gym_env.action_space.n, flags.use_lstm)
-    model.eval()
-    checkpoint = torch.load(checkpointpath, map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
+        model = Net(gym_env.observation_space, 1, flags.use_lstm)
+        model.eval()
+        checkpoint_pretrain = torch.load('/../IMPALA_Pretrained/model.tar', map_location='cpu')
+        for name, target_param in model.named_parameters():
+            for param in checkpoint_pretrain["model_state_dict"]:
+                if param == name:
+                    target_param.data.copy_(checkpoint_pretrain["model_state_dict"][param].data) if \
+                        checkpoint_pretrain["model_state_dict"][
+                            param].shape == target_param.shape else print(
+                        checkpoint_pretrain["model_state_dict"][param].shape,
+                        target_param.shape)
+        eval_start = time.time()
+        total_rew = []
+        st = 0
+        from IMPALA_experiments.helper_functions.uniform_instance_gen import uni_instance_gen
+        data_generator = uni_instance_gen
 
-    observation = env.initial()
-    returns = []
+        dataLoaded = np.load(
+            'IMPALA_experiments/helper_functions/DataGen/generatedData' + str(configs.n_j) + '_' + str(
+                configs.n_m) + '_Seed' + str(
+                configs.np_seed_validation) + '.npy')
+        dataset = []
+        for i in range(dataLoaded.shape[0]):
+            dataset.append((dataLoaded[i][0], dataLoaded[i][1]))
+        for i, data in enumerate(dataset):
+            agent_state = model.initial_state(batch_size=1)
+            # adj, fea, candidate, mask = env.reset(data)
+            observation = env.initial(data=data)
+            ep_reward = - env.gym_env.max_endTime
+            while True:
 
-    while len(returns) < num_episodes:
-        if flags.mode == "test_render":
-            env.gym_env.render()
-        agent_outputs = model(observation)
-        policy_outputs, _ = agent_outputs
-        observation = env.step(policy_outputs["action"])
-        if observation["done"].item():
-            returns.append(observation["episode_return"].item())
-            logging.info(
-                "Episode ended after %d steps. Return: %.1f",
-                observation["episode_step"].item(),
-                observation["episode_return"].item(),
-            )
-    env.close()
-    logging.info(
-        "Average returns over %i steps: %.1f", num_episodes, sum(returns) / len(returns)
-    )
-
+                agent_output, agent_state = model(observation['fea'], g_pool_step, padded_nei, observation['adj'],
+                                                  observation['candidate'].unsqueeze(0),
+                                                  observation['mask'].unsqueeze(0), agent_state, observation)
+                policy_outputs = agent_output
+                observation = env.step(policy_outputs["action"])
+                ep_reward += observation['reward']
+                total_rew.append(ep_reward)
+                if observation["done"].item():
+                    done = observation["done"].item()
+                    # observation = env.initial()
+                    logging.info(
+                        "Episode ended after %d steps. Return: %.1f",
+                        observation["episode_step"].item(),
+                        observation["episode_return"].item(),
+                    )
+                    break
 
 class AtariNet(nn.Module):
     def __init__(self, observation_shape, num_actions,use_lstm=False, n_j=configs.n_j,
@@ -1024,7 +1053,7 @@ def create_env(flags):
 
 
 def main(flags):
-    if flags.mode == "train":
+    if configs.finetuning>0:
         train(flags)
     else:
         test(flags)

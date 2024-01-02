@@ -26,7 +26,7 @@ parser.add_argument('--num_mlp_layers_actor', type=int, default=2, help='No. of 
 parser.add_argument('--hidden_dim_actor', type=int, default=32, help='hidden dim of MLP in actor')
 parser.add_argument('--num_mlp_layers_critic', type=int, default=2, help='No. of layers in critic MLP')
 parser.add_argument('--hidden_dim_critic', type=int, default=32, help='hidden dim of MLP in critic')
-# args for PPO
+
 parser.add_argument('--num_envs', type=int, default=1, help='No. of envs for training')
 parser.add_argument('--max_updates', type=int, default=10000, help='No. of episodes of each env for training')
 parser.add_argument('--lr', type=float, default=2e-5, help='lr')
@@ -39,5 +39,7 @@ parser.add_argument('--eps_clip', type=float, default=0.2, help='clip parameter 
 parser.add_argument('--vloss_coef', type=float, default=1, help='critic loss coefficient')
 parser.add_argument('--ploss_coef', type=float, default=2, help='policy loss coefficient')
 parser.add_argument('--entloss_coef', type=float, default=0.01, help='entropy loss coefficient')
+parser.add_argument("--finetuning", default=2,type=int,
+                    help="specify the data budget")
 
 configs = parser.parse_args()
