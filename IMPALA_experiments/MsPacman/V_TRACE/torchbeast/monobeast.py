@@ -64,8 +64,8 @@ parser.add_argument("--num_actors", default=48, type=int, metavar="N",
                     help="Number of actors (default: 4).")
 parser.add_argument("--st", default=False, type=bool, metavar="S",
                     help="Number of actors (default: 4).")
-parser.add_argument("--epi", default=0, type=int, metavar="B",
-                    help="Learner batch size.")
+parser.add_argument("--epi", default=0, type=int, metavar="",
+                    help="")
 parser.add_argument("--total_steps", default=20000000, type=int, metavar="T", #15000000
                     help="Total environment steps to train for.")
 parser.add_argument("--batch_size", default=32, type=int, metavar="B",
@@ -80,6 +80,9 @@ parser.add_argument("--disable_cuda", action="store_true",
                     help="Disable CUDA.")
 parser.add_argument("--use_lstm",default=True, action="store_true",
                     help="Use LSTM in agent model.")
+parser.add_argument("--finetuning", default=2,type=int,
+                    help="specify the data budget")
+
 
 # Loss settings.
 parser.add_argument("--entropy_cost", default=0.0006,
@@ -645,8 +648,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if flags.epi>=20:
-                break
+            if flags.finetuning == 1:
+                if flags.epi >= 10:
+                    break
+            else:
+                if flags.epi >= 20:
+                    break
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -704,8 +711,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if flags.epi>=20:
-                break
+            if flags.finetuning == 1:
+                if flags.epi >= 10:
+                    break
+            else:
+                if flags.epi >= 20:
+                    break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -960,8 +971,21 @@ def train2(flags):  # pylint: disable=too-many-branches, too-many-statements
     plogger.close()
 
 
-def test(flags, num_episodes: int = 10):
+def test(flags):  # pylint: disable=too-many-branches, too-many-statements
     train_start = time.time()
+    t_f = False
+    flags.st = True
+    flags.timeT=time.time()
+    if t_f:
+        checkpointpath = flags.savedir + "/latest/model.tar"
+        checkpoint = torch.load(
+            checkpointpath,
+            map_location="cpu")
+        env = create_env(flags)
+        model_l = Net(env.observation_space.shape, 5, flags.use_lstm)
+        model_l.load_state_dict(checkpoint["model_state_dict"])
+        checkpoint2 = checkpoint
+
     if flags.xpid is None:
         flags.xpid = "torchbeast-%s" % time.strftime("%Y%m%d-%H%M%S")
     plogger = file_writer.FileWriter(
@@ -990,11 +1014,19 @@ def test(flags, num_episodes: int = 10):
         flags.device = torch.device("cpu")
 
     env = create_env(flags)
-
     model = Net(env.observation_space.shape, 5, flags.use_lstm)
-    #checkpointpath = flags.savedir + "/latest/model.tar"
-    checkpoint = torch.load('/scratch/nstevia/torchbeast_sac_pacman5/logs/torchbeast/torchbeast-20230724-054841/model.tar', map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
+    if t_f:
+        model = model_l
+    if not t_f:
+        checkpoint_pretrain = torch.load('/Harnessing_generalist_agents_on_SE/IMPALA_Pretrained/model.tar')
+        for name, target_param in model.named_parameters():
+            for param in checkpoint_pretrain["model_state_dict"]:
+                if param == name:
+                    target_param.data.copy_(checkpoint_pretrain["model_state_dict"][param].data) if \
+                    checkpoint_pretrain["model_state_dict"][
+                        param].shape == target_param.shape else print(
+                        checkpoint_pretrain["model_state_dict"][param].shape,
+                        target_param.shape)
     # model.load_state_dict(checkpoint["model_state_dict"])
     buffers = create_buffers(flags, env.observation_space.shape, model.num_actions)
 
@@ -1012,7 +1044,7 @@ def test(flags, num_episodes: int = 10):
     ctx = mp.get_context("fork")
     free_queue = ctx.SimpleQueue()
     full_queue = ctx.SimpleQueue()
-    stepint = True
+    stepint = False
     for i in range(flags.num_actors):
         actor = ctx.Process(
             target=act,
@@ -1046,6 +1078,13 @@ def test(flags, num_episodes: int = 10):
         return 1 - min(epoch * T * B, flags.total_steps) / flags.total_steps
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    if t_f:
+        optimizer.load_state_dict(checkpoint2["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint2["scheduler_state_dict"])
+    # else:
+
+    # optimizer.load_state_dict(checkpoint_pretrain["optimizer_state_dict"])
+    # scheduler.load_state_dict(checkpoint_pretrain["scheduler_state_dict"])
 
     logger = logging.getLogger("logfile")
     stat_keys = [
@@ -1058,13 +1097,16 @@ def test(flags, num_episodes: int = 10):
     logger.info("# Step\t%s", "\t".join(stat_keys))
 
     step, stats = 0, {}
-    st=True
+    st = False
+
     def batch_and_learn(i, lock=threading.Lock()):
         """Thread target for the learning process."""
         nonlocal step, stats
         timings = prof.Timings()
-        while step < 5000000:
+        while step < flags.total_steps:
             timings.reset()
+            global glstep
+            glstep = step
             batch, agent_state = get_batch(
                 flags,
                 step,
@@ -1076,7 +1118,7 @@ def test(flags, num_episodes: int = 10):
 
             )
             stats = learn(
-                flags,st, model, learner_model, batch, agent_state, optimizer, scheduler
+                flags, st, model, learner_model, batch, agent_state, optimizer, scheduler
             )
             timings.time("learn")
             with lock:
@@ -1084,6 +1126,7 @@ def test(flags, num_episodes: int = 10):
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
+
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -1103,10 +1146,6 @@ def test(flags, num_episodes: int = 10):
         if flags.disable_checkpoint:
             return
         logging.info("Saving checkpoint to %s", checkpointpath)
-        fi = open('25OPTsave.txt', 'a+')
-        fi.write(str(flags.st) + ',' +
-            str('save')+ os.linesep)
-        fi.close()
         torch.save(
             {
                 "model_state_dict": model.state_dict(),
@@ -1118,7 +1157,6 @@ def test(flags, num_episodes: int = 10):
         )
 
     timer = timeit.default_timer
-
     try:
         last_checkpoint_time = timer()
         while step < flags.total_steps:
@@ -1158,9 +1196,13 @@ def test(flags, num_episodes: int = 10):
             free_queue.put(None)
         for actor in actor_processes:
             actor.join(timeout=1)
-
+    if t_f:
+        fi = open('16OPTtest.txt', 'a+')
+        fi.write(str(flags.st) + ',' +
+            str('testtime') + ',' + str(time.time() - train_start) + os.linesep)
+        fi.close()
     checkpoint()
-    #plogger.close()
+    plogger.close()
 
 
 class AtariNet(nn.Module):
@@ -1276,7 +1318,7 @@ def create_env(flags):
 
 
 def main(flags):
-    if flags.mode == "train":
+    if flags.finetuning>0:
         train(flags)
         train2(flags)
         #test(flags)

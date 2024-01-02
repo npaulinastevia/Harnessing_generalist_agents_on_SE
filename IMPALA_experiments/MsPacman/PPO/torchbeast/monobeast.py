@@ -84,6 +84,10 @@ parser.add_argument("--disable_cuda", action="store_true",
                     help="Disable CUDA.")
 parser.add_argument("--use_lstm", default=True,action="store_true",
                     help="Use LSTM in agent model.")
+parser.add_argument("--finetuning", default=2,type=int,
+                    help="specify the data budget")
+parser.add_argument("--epi", default=0, type=int, metavar="",
+                    help="")
 
 # Loss settings.
 parser.add_argument("--entropy_cost", default=0.0006, #0.0006
@@ -288,6 +292,8 @@ def act(
                     agent_output, agent_state = model(env_output, agent_state)
                 timings.time("model")
                 env_output = env.step(agent_output["action"])
+                if env_output['done'][0][0]:
+                    flags.epi = flags.epi + 1
                 st=flags.st
                 if st:
                     env.gym_env.env.ale.saveScreenPNG(flags.tmpdir+'/work_stev7/current_screen'+str(actor_index)+'.png')
@@ -665,8 +671,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if step>=10000:
-                break
+            if flags.finetuning == 1:
+                if flags.epi>=10:
+                    break
+            else:
+                if flags.epi>=20:
+                    break
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -724,8 +734,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if step>=10000:
-                break
+            if flags.finetuning == 1:
+                if flags.epi >= 10:
+                    break
+            else:
+                if flags.epi >= 20:
+                    break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -739,9 +753,9 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
             actor.join(timeout=1)
 
     checkpoint()
-    fi = open('/scratch/nstevia/torchbeastppopacman/2traintime.txt', 'a+')
-    fi.write(str(time.time() - train_start) +  os.linesep)
-    fi.close()
+    #fi = open('/scratch/nstevia/torchbeastppopacman/2traintime.txt', 'a+')
+    #fi.write(str(time.time() - train_start) +  os.linesep)
+    #fi.close()
     plogger.close()
 
 def train2(flags):  # pylint: disable=too-many-branches, too-many-statements
@@ -792,7 +806,7 @@ def train2(flags):  # pylint: disable=too-many-branches, too-many-statements
     if t_f:
         model=model_l
     if not t_f:
-        checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/IMPALA_Pretrained/model.tar')
+        checkpoint_pretrain = torch.load('./IMPALA_Pretrained/model.tar')
         for name, target_param in model.named_parameters():
             for param in checkpoint_pretrain["model_state_dict"]:
                 if param==name:
@@ -970,41 +984,230 @@ def train2(flags):  # pylint: disable=too-many-branches, too-many-statements
     plogger.close()
 
 
-def test(flags, num_episodes: int = 10):
+def test(flags):  # pylint: disable=too-many-branches, too-many-statements
+    t_f = False
+    flags.st=True
+    test_start = time.time()
+    flags.timeT = time.time()
+    if t_f:
+        checkpointpath = flags.savedir + "/latest/model.tar"
+        checkpoint = torch.load(
+            checkpointpath,
+            map_location="cpu")
+        env = create_env(flags)
+        checkpoint2=checkpoint
+        model_l = Net(env.observation_space.shape, 5, flags.use_lstm)
+        model_l.load_state_dict(checkpoint["model_state_dict"])
     if flags.xpid is None:
-        checkpointpath = "./latest/model.tar"
+        flags.xpid = "torchbeast-%s" % time.strftime("%Y%m%d-%H%M%S")
+    plogger = file_writer.FileWriter(
+        xpid=flags.xpid, xp_args=flags.__dict__, rootdir=flags.savedir
+    )
+    checkpointpath = os.path.expandvars(
+        os.path.expanduser("%s/%s/%s" % (flags.savedir, flags.xpid, "model.tar"))
+    )
+
+    if flags.num_buffers is None:  # Set sensible default for num_buffers.
+        flags.num_buffers = max(2 * flags.num_actors, flags.batch_size)
+    if flags.num_actors >= flags.num_buffers:
+        raise ValueError("num_buffers should be larger than num_actors")
+    if flags.num_buffers < flags.batch_size:
+        raise ValueError("num_buffers should be larger than batch_size")
+
+    T = flags.unroll_length
+    B = flags.batch_size
+
+    flags.device = None
+    if not flags.disable_cuda and torch.cuda.is_available():
+        logging.info("Using CUDA.")
+        flags.device = torch.device("cuda")
     else:
-        checkpointpath = os.path.expandvars(
-            os.path.expanduser("%s/%s/%s" % (flags.savedir, flags.xpid, "model.tar"))
+        logging.info("Not using CUDA.")
+        flags.device = torch.device("cpu")
+
+    env = create_env(flags)
+    env_action_space_n=5
+    model = Net(env.observation_space.shape, env_action_space_n, flags.use_lstm)
+
+    if t_f:
+        model=model_l
+    if not t_f:
+        checkpoint_pretrain = torch.load('./IMPALA_Pretrained/model.tar')
+        for name, target_param in model.named_parameters():
+            for param in checkpoint_pretrain["model_state_dict"]:
+                if param==name:
+                    target_param.data.copy_(checkpoint_pretrain["model_state_dict"][param].data) if checkpoint_pretrain["model_state_dict"][
+                                                                                               param].shape == target_param.shape  else print(
+                        checkpoint_pretrain["model_state_dict"][param].shape,
+                        target_param.shape)
+    #model.load_state_dict(checkpoint["model_state_dict"])
+    buffers = create_buffers(flags, env.observation_space.shape, model.num_actions)
+
+    model.share_memory()
+
+    # Add initial RNN state.
+    initial_agent_state_buffers = []
+    for _ in range(flags.num_buffers):
+        state = model.initial_state(batch_size=1)
+        for t in state:
+            t.share_memory_()
+        initial_agent_state_buffers.append(state)
+
+    actor_processes = []
+    ctx = mp.get_context("fork")
+    free_queue = ctx.SimpleQueue()
+    full_queue = ctx.SimpleQueue()
+
+    for i in range(flags.num_actors):
+        actor = ctx.Process(
+            target=act,
+            args=(
+                flags,
+                i,
+                free_queue,
+                full_queue,
+                model,
+                buffers,
+                initial_agent_state_buffers,
+            ),
+        )
+        actor.start()
+        actor_processes.append(actor)
+    env_action_space_n = 5
+    learner_model = Net(
+        env.observation_space.shape, env_action_space_n, flags.use_lstm
+    ).to(device=flags.device)
+
+    optimizer = torch.optim.RMSprop(
+        learner_model.parameters(),
+        lr=flags.learning_rate,
+        momentum=flags.momentum,
+        eps=flags.epsilon,
+        alpha=flags.alpha,
+    )
+
+    def lr_lambda(epoch):
+        return 1 - min(epoch * T * B, flags.total_steps) / flags.total_steps
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    if t_f:
+        optimizer.load_state_dict(checkpoint2["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint2["scheduler_state_dict"])
+    #else:
+      #  optimizer.load_state_dict(checkpoint_pretrain["optimizer_state_dict"])
+       # scheduler.load_state_dict(checkpoint_pretrain["scheduler_state_dict"])
+
+    logger = logging.getLogger("logfile")
+    stat_keys = [
+        "total_loss",
+        "mean_episode_return",
+        "pg_loss",
+        "baseline_loss",
+        "entropy_loss",
+    ]
+    logger.info("# Step\t%s", "\t".join(stat_keys))
+
+    step, stats = 0, {}
+
+    def batch_and_learn(i, lock=threading.Lock()):
+        """Thread target for the learning process."""
+        nonlocal step, stats
+        timings = prof.Timings()
+        while step < flags.total_steps:
+            timings.reset()
+            batch, agent_state = get_batch(
+                flags,
+                free_queue,
+                full_queue,
+                buffers,
+                initial_agent_state_buffers,
+                timings,
+            )
+            stats = learn(
+                flags, model, learner_model, batch, agent_state, optimizer, scheduler
+            )
+            timings.time("learn")
+            with lock:
+                to_log = dict(step=step)
+                to_log.update({k: stats[k] for k in stat_keys})
+                plogger.log(to_log)
+                step += T * B
+
+
+        if i == 0:
+            logging.info("Batch and learn: %s", timings.summary())
+
+    for m in range(flags.num_buffers):
+        free_queue.put(m)
+
+    threads = []
+    for i in range(flags.num_learner_threads):
+        thread = threading.Thread(
+            target=batch_and_learn, name="batch-and-learn-%d" % i, args=(i,)
+        )
+        thread.start()
+        threads.append(thread)
+
+    def checkpoint():
+        if flags.disable_checkpoint:
+            return
+        logging.info("Saving checkpoint to %s", checkpointpath)
+        torch.save(
+            {
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "flags": vars(flags),
+            },
+            checkpointpath,
         )
 
-    gym_env = create_env(flags)
-    env = environment.Environment(gym_env)
-    model = Net(gym_env.observation_space.shape, gym_env.action_space.n, flags.use_lstm)
-    model.eval()
-    checkpoint = torch.load(checkpointpath, map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
+    timer = timeit.default_timer
+    try:
+        last_checkpoint_time = timer()
+        while step < flags.total_steps:
+            start_step = step
+            start_time = timer()
+            time.sleep(5)
 
-    observation = env.initial()
-    returns = []
+            if timer() - last_checkpoint_time > 10 * 60:  # Save every 10 min.
+                checkpoint()
+                last_checkpoint_time = timer()
 
-    while len(returns) < num_episodes:
-        if flags.mode == "test_render":
-            env.gym_env.render()
-        agent_outputs = model(observation)
-        policy_outputs, _ = agent_outputs
-        observation = env.step(policy_outputs["action"])
-        if observation["done"].item():
-            returns.append(observation["episode_return"].item())
+            sps = (step - start_step) / (timer() - start_time)
+            if stats.get("episode_returns", None):
+                mean_return = (
+                    "Return per episode: %.1f. " % stats["mean_episode_return"]
+                )
+            else:
+                mean_return = ""
+            total_loss = stats.get("total_loss", float("inf"))
             logging.info(
-                "Episode ended after %d steps. Return: %.1f",
-                observation["episode_step"].item(),
-                observation["episode_return"].item(),
+                "Steps %i @ %.1f SPS. Loss %f. %sStats:\n%s",
+                step,
+                sps,
+                total_loss,
+                mean_return,
+                pprint.pformat(stats),
             )
-    env.close()
-    logging.info(
-        "Average returns over %i steps: %.1f", num_episodes, sum(returns) / len(returns)
-    )
+
+    except KeyboardInterrupt:
+        return  # Try joining actors then quit.
+    else:
+        for thread in threads:
+            thread.join()
+        logging.info("Learning finished after %d steps.", step)
+    finally:
+        for _ in range(flags.num_actors):
+            free_queue.put(None)
+        for actor in actor_processes:
+            actor.join(timeout=1)
+
+    checkpoint()
+    fi = open('/scratch/nstevia/torchbeastppopacman/2testtime.txt', 'a+')
+    fi.write(str(time.time() - test_start) +  os.linesep)
+    fi.close()
+    plogger.close()
 
 
 class AtariNet(nn.Module):
@@ -1124,7 +1327,7 @@ def create_env(flags):
 
 
 def main(flags):
-    if flags.mode == "train":
+    if flags.finetuning > 0:
         train(flags)
         train2(flags)
     else:
