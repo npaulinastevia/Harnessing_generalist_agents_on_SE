@@ -89,6 +89,8 @@ parser.add_argument("--discounting", default=0.99,
 parser.add_argument("--reward_clipping", default="none",
                     choices=["abs_one", "none"],
                     help="Reward clipping.")
+parser.add_argument("--finetuning", default=2,type=int,
+                    help="specify the data budget")
 
 # Optimizer settings.
 parser.add_argument("--learning_rate", default=0.00048,
@@ -326,9 +328,9 @@ def act(
 
                 #print('ennnnvvvn',numberofbug,env_output['reward'])
                 timings.time("step")
-                fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025outputrewOPT.txt', 'a+')
-                fi.write(str(numberbugs) + ',' + str(env_output['reward'])+ ',' + str(ep) + ',' + str(actor_index)+',' +str(env_output['info'])+  os.linesep)
-                fi.close()
+                #fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025outputrewOPT.txt', 'a+')
+                #fi.write(str(numberbugs) + ',' + str(env_output['reward'])+ ',' + str(ep) + ',' + str(actor_index)+',' +str(env_output['info'])+  os.linesep)
+                #fi.close()
                 for key in env_output:
                     if key=='info':
                         continue
@@ -441,10 +443,10 @@ def learn(
         total_loss = pg_loss + baseline_loss + entropy_loss
 
         episode_returns = batch["episode_return"][batch["done"]]
-        fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025outputepisodesOPT.txt', 'a+')
-        fi.write(
-            str('begin') + ',' + str(len(episode_returns)) + ',' + str(tuple(episode_returns.cpu().numpy())) + ',' + str() + os.linesep)
-        fi.close()
+        #fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025outputepisodesOPT.txt', 'a+')
+        #fi.write(
+        #    str('begin') + ',' + str(len(episode_returns)) + ',' + str(tuple(episode_returns.cpu().numpy())) + ',' + str() + os.linesep)
+        #fi.close()
         stats = {
             "episode_returns": tuple(episode_returns.cpu().numpy()),
             "mean_episode_return": torch.mean(episode_returns).item(),
@@ -524,7 +526,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     env = create_env(flags)
 
     model = Net(env.observation_space.shape, env.action_space.n, flags.use_lstm)
-    checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/torchbeast-20230515-132901/model.tar')
+    checkpoint_pretrain = torch.load('./IMPALA_Pretrained/model.tar')
     for name, target_param in model.named_parameters():
         for param in checkpoint_pretrain["model_state_dict"]:
             if param==name:
@@ -624,8 +626,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if time.time() - train_start>=864:
-                break
+            if flags.finetuning == 1:
+                if time.time() - train_start >= 432:
+                    break
+            else:
+                if time.time() - train_start >= 864:
+                    break
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -683,8 +689,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if time.time() - train_start>=864:
-                break
+            if flags.finetuning == 1:
+                if time.time() - train_start >= 432:
+                    break
+            else:
+                if time.time() - train_start >= 864:
+                    break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -698,9 +708,9 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
             actor.join(timeout=1)
 
     checkpoint()
-    fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025traintimeOPT.txt', 'a+')
-    fi.write(str(time.time() - train_start) +  os.linesep)
-    fi.close()
+    ##fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025traintimeOPT.txt', 'a+')
+    ##fi.write(str(time.time() - train_start) +  os.linesep)
+    ##fi.close()
     gym_env = create_env(flags)
     env = environment.Environment(gym_env)
     model = Net(gym_env.observation_space.shape, gym_env.action_space.n, flags.use_lstm)
@@ -727,9 +737,9 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 print('okdak',observation['info']['bug'],numberbugs)
                 numberbugs = numberbugs + 1
                 lebug.append(observation['info']['bug'])
-                fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025typeofbugs_addtrainOPT.txt', 'a+')
-                fi.write(str(observation['reward']) + ',' + str(observation['info']['bug']) + ',' + str(numberbugs) + os.linesep)
-                fi.close()
+                #fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025typeofbugs_addtrainOPT.txt', 'a+')
+                #fi.write(str(observation['reward']) + ',' + str(observation['info']['bug']) + ',' + str(numberbugs) + os.linesep)
+                #fi.close()
         if observation["done"].item() or st%400==0:
             done = observation["done"].item()
             observation = env.initial()
@@ -740,47 +750,63 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 observation["episode_return"].item(),
             )
         st=st+1
-    fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025evaltimeOPT.txt', 'a+')
-    fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
-    fi.close()
+    #fi = open('/scratch/nstevia/100kfinetuning/torchbeastwujivtrace'+str(flags.indice)+'/21clip025evaltimeOPT.txt', 'a+')
+    #fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
+    #fi.close()
     plogger.close()
 
 
 def test(flags, num_episodes: int = 10):
-    if flags.xpid is None:
-        checkpointpath = "./latest/model.tar"
-    else:
-        checkpointpath = os.path.expandvars(
-            os.path.expanduser("%s/%s/%s" % (flags.savedir, flags.xpid, "model.tar"))
-        )
-
     gym_env = create_env(flags)
     env = environment.Environment(gym_env)
     model = Net(gym_env.observation_space.shape, gym_env.action_space.n, flags.use_lstm)
     model.eval()
-    checkpoint = torch.load(checkpointpath, map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
-
+    checkpoint_pretrain = torch.load('./IMPALA_Pretrained/model.tar')
+    for name, target_param in model.named_parameters():
+        for param in checkpoint_pretrain["model_state_dict"]:
+            if param==name:
+                target_param.data.copy_(checkpoint_pretrain["model_state_dict"][param].data) if checkpoint_pretrain["model_state_dict"][
+                                                                                           param].shape == target_param.shape  else print(
+                    checkpoint_pretrain["model_state_dict"][param].shape,
+                    target_param.shape)
+    eval_start = time.time()
+    total_rew = []
+    st=0
     observation = env.initial()
-    returns = []
+    lebug = []
+    numberbugs = 0
+    agent_state = model.initial_state(batch_size=1)
+    while st<300000:
 
-    while len(returns) < num_episodes:
-        if flags.mode == "test_render":
-            env.gym_env.render()
-        agent_outputs = model(observation)
+
+        agent_outputs = model(observation,agent_state)
         policy_outputs, _ = agent_outputs
+
         observation = env.step(policy_outputs["action"])
-        if observation["done"].item():
-            returns.append(observation["episode_return"].item())
+        total_rew.append(observation['reward'])
+        print(observation['info']['bug'])
+        if observation['info']['bug'] is not None:
+            if observation['info']['bug'] not in lebug:
+                numberbugs = numberbugs + 1
+                lebug.append(observation['info']['bug'])
+                ##fi = open('/scratch/nstevia/torchbeastppowuji/10typeofbugs_addtrain.txt', 'a+')
+                ##fi.write(str(st)+','+str(observation['reward']) + ',' + str(observation['info']['bug']) + ',' + str(numberbugs) + os.linesep)
+                ##fi.close()
+        #if observation["done"].item():
+        if observation["done"].item() or st % 400 == 0:
+            done = observation["done"].item()
+            observation = env.initial()
+            agent_state = model.initial_state(batch_size=1)
+
             logging.info(
                 "Episode ended after %d steps. Return: %.1f",
                 observation["episode_step"].item(),
                 observation["episode_return"].item(),
             )
-    env.close()
-    logging.info(
-        "Average returns over %i steps: %.1f", num_episodes, sum(returns) / len(returns)
-    )
+        st=st+1
+    #fi = open('10evaltime_test.txt', 'a+')
+    #fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
+    #fi.close()
 
 
 class AtariNet(nn.Module):
@@ -905,7 +931,7 @@ def create_env(flags):
 
 
 def main(flags):
-    if flags.mode == "train":
+    if flags.finetuning > 0:
         train(flags)
     else:
         test(flags)

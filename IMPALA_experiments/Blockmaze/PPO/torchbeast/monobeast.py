@@ -84,6 +84,8 @@ parser.add_argument("--disable_cuda", action="store_true",
                     help="Disable CUDA.")
 parser.add_argument("--use_lstm", default=True,action="store_true",
                     help="Use LSTM in agent model.")
+parser.add_argument("--finetuning", default=2,type=int,
+                    help="specify the data budget")
 
 # Loss settings.
 parser.add_argument("--entropy_cost", default=0.0006, #0.0006
@@ -322,10 +324,10 @@ def act(
 
                 # print('ennnnvvvn',numberofbug,env_output['reward'])
                 timings.time("step")
-                fi = open('/scratch/nstevia/torchbeastppowuji/10outputrew.txt', 'a+')
-                fi.write(str(numberbugs) + ',' + str(env_output['reward']) + ',' + str(ep) + ',' + str(
-                    actor_index) + ',' + str(env_output['info']) + os.linesep)
-                fi.close()
+                #fi = open('/scratch/nstevia/torchbeastppowuji/10outputrew.txt', 'a+')
+                #fi.write(str(numberbugs) + ',' + str(env_output['reward']) + ',' + str(ep) + ',' + str(
+                 #   actor_index) + ',' + str(env_output['info']) + os.linesep)
+                #fi.close()
                 if env_output['done'][0][0]:
                     ep=ep+1
                 for key in env_output:
@@ -425,16 +427,6 @@ def learn(
             entropy_loss = flags.entropy_cost * compute_entropy_loss(
                 learner_outputs["policy_logits"]
             )
-
-
-            #torch.Size([])
-            #torch.Size([79, 32, 9]) learner_outputs["policy_logits"].shape
-            #torch.Size([80, 32]) rewards.shape
-            #torch.Size([80, 32]) batch["done"].shape
-            #torch.Size([80, 32, 9]) batch['policy_logits'].shape
-            #torch.Size([80, 32]) advantages.shape
-            #torch.Size([80, 32]) rewards_p.shape
-            #torch.Size([79, 32]) learner_outputs["baseline"].shape
             advantages = rewards_p.detach() - learner_outputs['baseline']
             ratios = torch.exp(learner_outputs["heur"] - batch['heur'])
 
@@ -453,10 +445,10 @@ def learn(
 
 
             episode_returns = batch["episode_return"][batch["done"]]
-            fi = open('/scratch/nstevia/torchbeastppowuji/10outputepisodes.txt', 'a+')
-            fi.write(
-                str('begin') + ',' + str(len(episode_returns)) + ',' + str(tuple(episode_returns.cpu().numpy())) + ',' + str() + os.linesep)
-            fi.close()
+            #fi = open('/scratch/nstevia/torchbeastppowuji/10outputepisodes.txt', 'a+')
+            #fi.write(
+            #    str('begin') + ',' + str(len(episode_returns)) + ',' + str(tuple(episode_returns.cpu().numpy())) + ',' + str() + os.linesep)
+            #fi.close()
             stats = {
                 "episode_returns": tuple(episode_returns.cpu().numpy()),
                 "mean_episode_return": torch.mean(episode_returns).item(),
@@ -479,7 +471,6 @@ def learn(
                         param].shape == target_param.shape else print(
                         model.state_dict()[param].shape,
                         target_param.shape)
-        #actor_model.load_state_dict(model.state_dict())
         return stats
 
 
@@ -538,7 +529,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     env = create_env(flags)
 
     model = Net(env.observation_space.shape, env.action_space.n, flags.use_lstm)
-    checkpoint_pretrain = torch.load('/scratch/nstevia/palaas/torchbeast/IMPALA_Pretrained/model.tar')
+    checkpoint_pretrain = torch.load('./IMPALA_Pretrained/model.tar')
     for name, target_param in model.named_parameters():
         for param in checkpoint_pretrain["model_state_dict"]:
             if param==name:
@@ -599,14 +590,9 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
         eps=flags.epsilon,
         alpha=flags.alpha,
     )
-
     def lr_lambda(epoch):
         return 1 - min(epoch * T * B, flags.total_steps) / flags.total_steps
-
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-    #optimizer.load_state_dict(checkpoint_pretrain["optimizer_state_dict"])
-    #scheduler.load_state_dict(checkpoint_pretrain["scheduler_state_dict"])
-
     logger = logging.getLogger("logfile")
     stat_keys = [
         "total_loss",
@@ -642,8 +628,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 to_log.update({k: stats[k] for k in stat_keys})
                 plogger.log(to_log)
                 step += T * B
-            if step>=10000:
-                break
+            if flags.finetuning==1:
+                if time.time() - train_start >= 432:
+                    break
+            else:
+                if time.time() - train_start >= 864:
+                    break
 
         if i == 0:
             logging.info("Batch and learn: %s", timings.summary())
@@ -701,8 +691,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 mean_return,
                 pprint.pformat(stats),
             )
-            if step>=10000:
-                break
+            if flags.finetuning == 1:
+                if time.time() - train_start >= 432:
+                    break
+            else:
+                if time.time() - train_start >= 864:
+                    break
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -735,14 +729,10 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     numberbugs = 0
     agent_state = model.initial_state(batch_size=1)
     while st<300000:
-
-
         agent_outputs = model(observation,agent_state)
         policy_outputs, _ = agent_outputs
-
         observation = env.step(policy_outputs["action"])
         total_rew.append(observation['reward'])
-        print(st,observation['info'])
         if observation['info']['bug'] is not None:
             if observation['info']['bug'] not in lebug:
                 numberbugs = numberbugs + 1
@@ -761,9 +751,9 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
                 observation["episode_return"].item(),
             )
         st=st+1
-    fi = open('/scratch/nstevia/torchbeastppowuji/10evaltime.txt', 'a+')
-    fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
-    fi.close()
+    #fi = open('/scratch/nstevia/torchbeastppowuji/10evaltime.txt', 'a+')
+    #fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
+    #fi.close()
     plogger.close()
 
 
@@ -772,9 +762,14 @@ def test(flags, num_episodes: int = 10):
     env = environment.Environment(gym_env)
     model = Net(gym_env.observation_space.shape, gym_env.action_space.n, flags.use_lstm)
     model.eval()
-    checkpointpath = flags.savedir + "/latest/model.tar"
-    checkpoint = torch.load(checkpointpath, map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
+    checkpoint_pretrain = torch.load('./IMPALA_Pretrained/model.tar')
+    for name, target_param in model.named_parameters():
+        for param in checkpoint_pretrain["model_state_dict"]:
+            if param==name:
+                target_param.data.copy_(checkpoint_pretrain["model_state_dict"][param].data) if checkpoint_pretrain["model_state_dict"][
+                                                                                           param].shape == target_param.shape  else print(
+                    checkpoint_pretrain["model_state_dict"][param].shape,
+                    target_param.shape)
     eval_start = time.time()
     total_rew = []
     st=0
@@ -782,7 +777,7 @@ def test(flags, num_episodes: int = 10):
     lebug = []
     numberbugs = 0
     agent_state = model.initial_state(batch_size=1)
-    while st<3000000:
+    while st<300000:
 
 
         agent_outputs = model(observation,agent_state)
@@ -810,7 +805,7 @@ def test(flags, num_episodes: int = 10):
                 observation["episode_return"].item(),
             )
         st=st+1
-    fi = open('/scratch/nstevia/torchbeastppowuji/10evaltime_test.txt', 'a+')
+    fi = open('10evaltime_test.txt', 'a+')
     fi.write(str(time.time() - eval_start) + ',' +str(total_rew )+ os.linesep)
     fi.close()
 
@@ -902,10 +897,7 @@ class AtariNet(nn.Module):
         policy_logits = self.policy(core_output)
         policy_logits=F.softmax(policy_logits, dim=-1)
         baseline = self.baseline(core_output)
-
         if self.training:
-            print('policy_tra', policy_logits.shape)
-            #action = torch.multinomial(F.softmax(policy_logits, dim=1), num_samples=1)
             act_e= D.Categorical(logits=policy_logits).sample()
             action=act_e
             heur = D.Categorical(logits=policy_logits).log_prob(act_e)
@@ -913,7 +905,6 @@ class AtariNet(nn.Module):
             heur = heur.view(T, B)
         else:
             # Don't sample when testing.
-            print('policy_logits',policy_logits)
             action = torch.argmax(policy_logits, dim=1)
             act_e=action
             heur = None
@@ -946,7 +937,7 @@ def create_env(flags):
 
 
 def main(flags):
-    if flags.mode == "train":
+    if flags.finetuning>0:
         train(flags)
     else:
         test(flags)
