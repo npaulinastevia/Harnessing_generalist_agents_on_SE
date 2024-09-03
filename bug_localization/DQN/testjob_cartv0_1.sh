@@ -3,7 +3,6 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --job-name=tomcat_DQN1
 #SBATCH --time=24:00:00
-#SBATCH --account=def-foutsekh
 #SBATCH --output=tomcat_DQN1.txt
 
 module load anaconda3

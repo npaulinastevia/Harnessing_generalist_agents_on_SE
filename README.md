@@ -1,4 +1,8 @@
 # Harnessing pre-trained generalist agents for SE tasks
+Our supplementary materials to support the findings of our paper can be found in supplementary.pdf
+
+Our predictions can be found in the predictions folder.
+
 This repository contains the training scripts, datasets and experiments correspoding to our paper here. We forked the following repositories 
 in order to set up the generalist agents:
 
